@@ -1,0 +1,6 @@
+Proxy contract address: 0x59D8CB54E3C00F635bC7e8C416dc1Eb11c982E51
+Implementation contract address: 0x39BF3fb4e6287e8AE3A530901f6f155e209a40a5
+Admin contract address: 0x6f635c70462F9f3ed9FB92182Ff778aa06108483
+
+// verify the contract
+bunx hardhat verify --network sepolia  <Proxy contract address>
