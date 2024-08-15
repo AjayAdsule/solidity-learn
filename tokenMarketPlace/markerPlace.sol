@@ -7,13 +7,18 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "hardhat/console.sol";
 
 contract TokenMarketPlace is Ownable {
+    struct BuyerAndSeller {
+        uint256 buyer;
+        uint256 seller;
+        uint256 price;
+    }
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
 
     uint256 public tokenPrice = 2e16 wei; // 0.02 ether per GLD token
     uint256 public sellerCount = 1;
     uint256 public buyerCount = 1;
-
+    BuyerAndSeller public buyersAndSellers = BuyerAndSeller(1, 1, 2e16 wei);
     IERC20 public gldToken;
 
     constructor(address _gldToken) Ownable(msg.sender) {
@@ -32,70 +37,86 @@ contract TokenMarketPlace is Ownable {
     event CalculateTokenPrice(uint256 priceToPay);
 
     // Updated logic for token price calculation with safeguards
-    function adjustTokenPriceBasedOnDemand() public {}
-
-    // Buy tokens from the marketplace
-    function buyGLDToken(uint256 _amountOfToken) public payable {
-        // this line is empty because i want to learn deep about token marker price
-        (bool success, ) = address(this).call{
-            value: _amountOfToken * tokenPrice
-        }("");
-        if (!success) revert();
+    function adjustTokenPriceBasedOnDemand() public {
+        uint256 marketDemandRatio = buyerCount.mul(1e18).div(sellerCount);
+        uint256 smoothingFactor = 1e18;
+        uint256 adjustedRatio = marketDemandRatio.add(smoothingFactor).div(2);
+        uint256 newTokenPrice = tokenPrice.mul(adjustedRatio).div(1e18);
+        uint256 minimumPrice = 2e16;
+        if (newTokenPrice < minimumPrice) {
+            tokenPrice = minimumPrice;
+        }
+        tokenPrice = newTokenPrice;
+        emit TokenPriceUpdated(newTokenPrice);
     }
 
-    function calculateTokenPrice(uint256 _amountOfToken) public {}
+    function calculateTokenPrice(uint256 _amountOfToken)
+        public
+        returns (uint256)
+    {
+        if (_amountOfToken <= 0) revert();
+        adjustTokenPriceBasedOnDemand();
+        uint256 _amountToPay = _amountOfToken.mul(tokenPrice).div(1e18);
+        emit CalculateTokenPrice(_amountToPay);
+        return _amountToPay;
+    }
+
+    // Buy tokens from the marketplace
+    /*
+            we are purchasing token from this contract account
+            we have the balance to purchase this token
+            then amount should tranfer to this account
+            after transferring we need to send token on buyer account
+        */
+    function buyGLDToken(uint256 _amountOfToken) public payable {
+        if (_amountOfToken <= 0) revert();
+        uint256 price = calculateTokenPrice(_amountOfToken);
+        require(msg.value >= price, "insufficent funds");
+        gldToken.safeTransfer(msg.sender, _amountOfToken);
+        emit TokenBought(msg.sender, _amountOfToken, price);
+        buyerCount++;
+    }
 
     // Sell tokens back to the marketplace
+    /*
+        we need check user has token in their account
+        calculate the token value
+        then get token to contract address
+        transfer value to seller
+        */
     function sellGLDToken(uint256 amountOfToken) public {
-        if (amountOfToken > gldToken.balanceOf(msg.sender)) revert();
+        if (amountOfToken <= 0) revert();
+        require(
+            gldToken.balanceOf(msg.sender) >= amountOfToken,
+            "insufficent token in accout"
+        );
+        uint256 pricePayToUser = calculateTokenPrice(amountOfToken);
         gldToken.safeTransferFrom(msg.sender, address(this), amountOfToken);
+        (bool success, ) = payable(msg.sender).call{value: pricePayToUser}("");
+        if (!success) revert();
+        sellerCount++;
+        emit TokenSold(msg.sender, amountOfToken, pricePayToUser);
     }
 
     // Owner can withdraw excess tokens from the contract
+    /*
+     need check contract has sufficent token that owner demand     
+    */
     function withdrawTokens(uint256 amount) public onlyOwner {
-        if (gldToken.balanceOf(address(this)) > amount) revert();
-        bool success = gldToken.transfer(owner(), amount);
-        if (!success) revert();
+        if (amount <= 0) revert();
+        require(
+            gldToken.balanceOf(address(this)) >= amount,
+            "Insufficent token in contract address"
+        );
+        gldToken.safeTransfer(msg.sender, amount);
+        emit TokensWithdrawn(msg.sender, amount);
     }
 
     // Owner can withdraw accumulated Ether from the contract
-    function withdrawEther(uint256 amount) public onlyOwner {}
-}  
-
-//buyerCount = 5
-//sellerCount = 1
-//markedDemand ratio =
-//buyerCount.mul(1e18).div(sellerCount) = 5*10^18 /1 = 5*10^18
-//adjustedRatio = (5*10^18 + 1*10^18)/2 = (6 * 10^18)/2 = 3 * 10^18
-// newTokenPrice = //(2 * 10^16 * 3 * 10^18) / 10^18 = (6 * 10^34)/10^18 = 6*10^16 wei = 0.06 ether
-
-contract MyContract {
-    uint256 public tokenPrice = 2e16 wei;
-    using SafeMath for uint256;
-
-    function tokenPriceCalulator(uint256 buyerCount, uint256 sellerCount)
-        public
-    {
-        // Calculate the market demand ratio with a smoothing factor to prevent drastic changes
-        uint256 marketDemandRatio = buyerCount.mul(1e18).div(sellerCount);
-        console.log("marketDemandRatio", marketDemandRatio);
-
-        // Introduce a smoothing factor to avoid abrupt changes
-        uint256 smoothingFactor = 1e18; // Can be adjusted based on the desired sensitivity
-        uint256 adjustedRatio = marketDemandRatio.add(smoothingFactor).div(2);
-        console.log("adjustedRatio", adjustedRatio);
-
-        // Adjust the token price based on the adjusted market demand ratio
-        uint256 newTokenPrice = tokenPrice.mul(adjustedRatio).div(1e18);
-        console.log("newTokenPrice", newTokenPrice);
-
-        // Set a minimum price to prevent it from dropping too low
-        uint256 minimumPrice = 1e15; // 0.001 ether as minimum price
-        if (newTokenPrice < minimumPrice) {
-            newTokenPrice = minimumPrice;
-        }
-
-        tokenPrice = newTokenPrice;
-        console.log("tokenPrice", tokenPrice);
+    function withdrawEther(uint256 amount) public onlyOwner {
+        if (address(this).balance >= amount) revert();
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        if (!success) revert();
+        emit EtherWithdrawn(msg.sender, amount);
     }
 }
