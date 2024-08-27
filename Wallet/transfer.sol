@@ -17,5 +17,6 @@ contract TypesOfTranfer {
         _add.transfer(msg.value);
     }
 
+
     function getEth() external payable {}
 }
