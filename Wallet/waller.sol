@@ -29,7 +29,8 @@ contract LearningWallet {
         );
         _receiver.transfer(_amount);
     }
-
+ 
+ 
     //this function will take input as balance and transfer to waller
     function transferViaMsgValue(address payable _to) external payable {
         require(owner.balance >= msg.value, "you have insufficent ether");
