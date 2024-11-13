@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-
-//https://dapp-world.com/problem/team-wallet-easy/problem
 contract TeamWallet {
     address owner;
 
@@ -23,7 +21,7 @@ contract TeamWallet {
         uint256 rejectionCount;
         string status;
     }
-    Transaction[] public transactins;
+    Transaction[] public transactions;
     uint256 transactionId = 0;
     Member public members;
 
@@ -47,6 +45,20 @@ contract TeamWallet {
         members.wallerAddress = member;
     }
 
+    modifier isValidWinnerAddress() {
+        bool isValidWinner = false;
+        for (uint256 i = 0; i < members.wallerAddress.length; i++) {
+            if (msg.sender == members.wallerAddress[i]) {
+                isValidWinner = true;
+            }
+        }
+        require(
+            isValidWinner,
+            "you are not authorize for executing this function"
+        );
+        _;
+    }
+
     //For spending amount from the wallet
     /*
             Requirement
@@ -55,18 +67,13 @@ contract TeamWallet {
             3 one approval will be record as from behalf of msg.sender
             4 amount should be greate than 0
         */
-    function spend(uint256 amount) public {
+    function spend(uint256 amount) public isValidWinnerAddress {
         require(amount > 0, "amount should be greater than 0");
         require(
             amount <= members.credits,
             "amount should not be greater than the remaining credit"
         );
-        bool isValidWinnerAddress = false;
-        for (uint256 i = 0; i < members.wallerAddress.length; i++) {
-            if (msg.sender == members.wallerAddress[i]) {
-                isValidWinnerAddress = true;
-            }
-        }
+
         Transaction({
             txnNumber: transactionId++,
             amount: amount,
@@ -78,18 +85,24 @@ contract TeamWallet {
     }
 
     //For approving a transaction request
-    function approve(uint256 n) public {}
+    function approve(uint256 n) public isValidWinnerAddress {}
 
     //For rejecting a transaction request
     function reject(uint256 n) public {}
 
     //For checking remaing credits in the wallet
-    function credits() public returns (uint256) {}
+    function credits() public view returns (uint256) {
+        return members.credits;
+    }
 
     //For checking nth transaction status
     function viewTransaction(uint256 n)
         public
         view
         returns (uint256 amount, string memory status)
-    {}
+    {
+        return (transactions[n].amount, transactions[n].status);
+    }
 }
+
+@params https://dapp-world.com/problem/team-wallet-easy/problem
