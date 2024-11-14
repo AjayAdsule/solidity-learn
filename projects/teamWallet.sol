@@ -14,14 +14,15 @@ contract TeamWallet {
     }
 
     struct Transaction {
-        uint256 txnNumber;
         uint256 amount;
         address senderAddress;
         uint256 approvalCount;
         uint256 rejectionCount;
         string status;
     }
-    Transaction[] public transactions;
+
+    mapping(uint256 => Transaction) public transactions;
+
     uint256 transactionId = 0;
     Member public members;
 
@@ -74,8 +75,7 @@ contract TeamWallet {
             "amount should not be greater than the remaining credit"
         );
 
-        Transaction({
-            txnNumber: transactionId++,
+        transactions[transactionId++] = Transaction({
             amount: amount,
             senderAddress: msg.sender,
             approvalCount: 1,
@@ -84,11 +84,36 @@ contract TeamWallet {
         });
     }
 
-    //For approving a transaction request
-    function approve(uint256 n) public isValidWinnerAddress {}
+    /* 
+    formula ---> totalmember * percentage/100
+    step for approve function
+    1 --> increase the approval count of member by 1
+    2 --> check by formula if it's 70%  update to approve otherwise status will pending
+ */
+    // For approving a transaction request
+    function approve(uint256 n) public isValidWinnerAddress {
+        transactions[n].approvalCount += 1;
+        uint256 requiredApprovals = (members.wallerAddress.length * 70 + 99) /
+            100;
+        if (transactions[n].approvalCount >= requiredApprovals) {
+            transactions[n].status = "approved";
+        } else {
+            transactions[n].status = "pending";
+        }
+    }
 
     //For rejecting a transaction request
-    function reject(uint256 n) public {}
+    function reject(uint256 n) public {
+        transactions[n].rejectionCount += 1;
+        // Calculate the 30% threshold for rejection
+        uint256 requiredRejections = (members.wallerAddress.length * 30 + 99) /
+            100;
+        if (transactions[n].rejectionCount >= requiredRejections) {
+            transactions[n].status = "reject";
+        } else {
+            transactions[n].status = "pending";
+        }
+    }
 
     //For checking remaing credits in the wallet
     function credits() public view returns (uint256) {
